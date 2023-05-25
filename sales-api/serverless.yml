@@ -5,9 +5,125 @@ provider:
   name: aws
   runtime: nodejs14.x
   region: ap-northeast-2
+  iam:
+    role:
+      statements:
+        # Allow functions to list all buckets
+        - Effect: Allow
+          Action: 'sns:*'
+          Resource: '*'
 
+resources:
+  Resources:
+    # Define the SQS queue
+    MySqsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: "sales-api-SQS"
+        VisibilityTimeout: 30
+        MessageRetentionPeriod: 60
+        RedrivePolicy:
+          deadLetterTargetArn:
+            "Fn::GetAtt":
+              - ReceiverDeadLetterQueue
+              - Arn
+          maxReceiveCount: 1
+    ReceiverDeadLetterQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: "sales-api-DLQ"
+        MessageRetentionPeriod: 1209600 # 14 days in seconds
+  
+    # Define the SNS topic
+    MySnsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        # Subscribes the SQS queue to the SNS topic
+        Subscription:
+          - Protocol: sqs
+            Endpoint: !GetAtt MySqsQueue.Arn
+  
+    # Policy allows SNS to publish to this SQS queue
+    SnsToSqsPolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: "Allow SNS publish to SQS"
+              Effect: Allow
+              Principal: 
+                Service: "sns.amazonaws.com"
+              Resource: !GetAtt MySqsQueue.Arn
+              Action: SQS:SendMessage
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref MySnsTopic
+        Queues:
+          - Ref: MySqsQueue
+        
 functions:
   api:
     handler: handler.handler
     events:
       - httpApi: '*'
+    environment:
+      HOSTNAME: project3db2.cpajpop7ewnt.ap-northeast-2.rds.amazonaws.com
+      USERNAME: team9
+      PASSWORD: team9
+      DATABASE: team9
+      TOPIC_ARN: !Ref MySnsTopic
+  api-queue:
+    handler: index.consumer
+    events:
+      - sqs:
+          arn: !GetAtt MySqsQueue.Arn
+          maximumConcurrency: 250  
+
+      	
+Outputs:
+  MySqsQueueName:
+    Description: SQS queue name
+    Value: !GetAtt MySqsQueue.QueueName
+  MySqsQueueArn:
+    Description: SQS queue ARN
+    Value: !GetAtt MySqsQueue.Arn
+  MySqsQueueURL:
+    Description: SQS queue URL
+    Value: !Ref MySqsQueue    
+  MySnsTopicName:
+    Description: SNS topic name
+    Value: !GetAtt MySnsTopic.TopicName
+  MySnsTopicArn:
+    Description: SNS topic ARN
+    Value: !Ref MySnsTopic
+      
+#plugins:
+#  - serverless-lift
+
+  
+#constructs:
+#  jobs:
+#    type: queue
+#    worker:
+#      handler: index.consumer
+#
+#functions:
+#  dispatcher:
+#    handler: dispatcher.dispatch
+#    events:
+#      - sns:
+#          #SNS 주제가 아직 존재하지 않지만 편집 중인 serverless.yml 파일에 정의되어 있는 경우 ARN을 가져오기
+#          arn: !Ref SuperTopic
+#          topicName: sales-api-topic
+#  api:
+#    handler: handler.handler
+#    events:
+#      - httpApi: '*'
+#    environment:
+#      HOSTNAME: project3db.cpajpop7ewnt.ap-northeast-2.rds.amazonaws.com
+#      USERNAME: team9
+#      PASSWORD: team9
+#      DATABASE: team9
+#      QUEUE_URL: ${construct:jobs.queueUrl}
+#      TOPIC_ARN: !Ref SuperTopic
