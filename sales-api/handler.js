@@ -49,7 +49,7 @@ app.post("/checkout", connectDb, async (req, res, next) => {
 	  	  DataType: "String",
 	  	},
 	  	MessageAttributeFactoryId: {
-	  	  StringValue: req.body.MessageAttributeFactoryId,
+	  	  StringValue: product.factory_id,
 	  	  //StringValue: req.body.BIN_TO_UUID(factory_id),
 	  	  DataType: "String",
 	  	},
@@ -66,6 +66,29 @@ app.post("/checkout", connectDb, async (req, res, next) => {
     await req.conn.end()
     return res.status(400).json({ message: "상품 없음" });
   }
+});
+
+
+app.post("/checkin", connectDb, async (req, res, next) => {
+	const result = req.body;
+    if (result!={}) {
+      await req.conn.query(setStock(result.MessageAttributeProductId, result.MessageAttributeProductCnt)) 
+      return res.status(200).json(
+		{
+			data: {
+				data: {
+					MessageGroupId : "stock-arrival-group", //"stock-arrival-group"
+					MessageAttributeProductId : result.MessageAttributeProductId,
+					MessageAttributeProductCnt : result.MessageAttributeProductCnt,
+					MessageAttributeFactoryId : result.MessageAttributeFactoryId,
+					MessageAttributeRequester : result.MessageAttributeRequester,
+					CallbackUrl : result.CallbackUrl
+				},
+				id: "2590fca2-ee22-11ed-a5df-0242ac110002", //"2590fca2-ee22-11ed-a5df-0242ac110002",
+				reqestor: result.MessageAttributeRequester
+			}
+		});
+	}
 });
 
 app.use((req, res, next) => {

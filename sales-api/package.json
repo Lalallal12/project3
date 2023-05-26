@@ -5,6 +5,7 @@
   "dependencies": {
     "@aws-sdk/client-sns": "^3.338.0",
     "aws-sdk": "^2.1167.0",
+    "axios": "^1.4.0",
     "dotenv": "^16.0.1",
     "express": "^4.17.1",
     "mysql2": "^2.3.3",
